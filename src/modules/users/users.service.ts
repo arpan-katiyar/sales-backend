@@ -1,13 +1,23 @@
 import { ROLES, type RoleName } from '../../common/constants.js';
 import { AppError } from '../../common/errors/app-error.js';
-import { hashPassword, verifyPassword } from '../../common/utils/password.js';
+import { hashPassword } from '../../common/utils/password.js';
 import type { PublicUser } from '../auth/auth.types.js';
 import { refreshTokenRepository } from '../auth/auth.repository.js';
 import type { AddUserInput, ChangePasswordInput } from '../auth/auth.schema.js';
 import { isDuplicateError, usersRepository } from './users.repository.js';
 
+export type ListedUser = {
+  id: number;
+  username: string;
+  roles: string[];
+  status: string;
+};
+
 export function createUserService(
-  users: Pick<typeof usersRepository, 'findByUsername' | 'findById' | 'create' | 'updatePassword'>,
+  users: Pick<
+    typeof usersRepository,
+    'findByUsername' | 'findById' | 'create' | 'updatePassword' | 'listActive' | 'searchActive' | 'deactivate'
+  >,
   refreshTokens: Pick<typeof refreshTokenRepository, 'revokeAllForUser'>,
 ) {
   return {
@@ -50,16 +60,6 @@ export function createUserService(
         throw new AppError(1111, 'Data not found. ', 200);
       }
 
-      if (isSelf) {
-        if (!input.currentPassword) {
-          throw new AppError(400, 'Current password is required.', 200);
-        }
-        const matches = await verifyPassword(input.currentPassword, user.passwordHash);
-        if (!matches) {
-          throw new AppError(401, 'Current password is incorrect.', 200);
-        }
-      }
-
       await users.updatePassword(user.id, await hashPassword(input.newPassword));
       await refreshTokens.revokeAllForUser(user.id);
 
@@ -68,6 +68,56 @@ export function createUserService(
         userId: user.id,
         status: 'SUCCESS',
       };
+    },
+
+    async list(): Promise<{ users: ListedUser[] }> {
+      const rows = await users.listActive();
+      return {
+        users: rows.map((row) => ({
+          id: row.id,
+          username: row.username,
+          roles: row.roles,
+          status: row.status,
+        })),
+      };
+    },
+
+    async search(keyword: string): Promise<Array<{ id: number; username: string; roles: string[] }>> {
+      const trimmed = keyword.trim();
+      if (trimmed === '') {
+        return [];
+      }
+      const rows = await users.searchActive(trimmed);
+      return rows.map((row) => ({
+        id: row.id,
+        username: row.username,
+        roles: row.roles,
+      }));
+    },
+
+    async remove(userId: number): Promise<{ message: string }> {
+      const removed = await users.deactivate(userId);
+      if (!removed) {
+        throw new AppError(1111, 'Data not found. ', 200);
+      }
+      await refreshTokens.revokeAllForUser(userId);
+      return { message: 'User deleted successfully' };
+    },
+
+    async detail(userId: number): Promise<{ encryptedPayload: string }> {
+      const user = await users.findById(userId);
+      if (!user || user.status !== 'ACTIVE') {
+        throw new AppError(1111, 'Data not found. ', 200);
+      }
+      const payload = Buffer.from(
+        JSON.stringify({
+          id: user.id,
+          username: user.username,
+          roles: user.roles,
+          status: user.status,
+        }),
+      ).toString('base64');
+      return { encryptedPayload: payload };
     },
   };
 }

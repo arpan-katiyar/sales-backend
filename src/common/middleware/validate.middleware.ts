@@ -15,3 +15,34 @@ export function validateBody<T>(schema: ZodType<T>) {
     next();
   };
 }
+
+export function validateParams<T>(schema: ZodType<T>) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    const parsed = schema.safeParse(req.params);
+    if (!parsed.success) {
+      const message = parsed.error.issues.map((issue) => issue.message).join('; ');
+      next(new AppError(400, message, 200));
+      return;
+    }
+    Object.assign(req.params, parsed.data);
+    next();
+  };
+}
+
+export function validateQuery<T>(schema: ZodType<T>) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    const parsed = schema.safeParse(req.query);
+    if (!parsed.success) {
+      const message = parsed.error.issues.map((issue) => issue.message).join('; ');
+      next(new AppError(400, message, 200));
+      return;
+    }
+    Object.defineProperty(req, 'query', {
+      value: parsed.data,
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+    next();
+  };
+}

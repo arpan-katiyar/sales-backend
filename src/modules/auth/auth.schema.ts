@@ -31,9 +31,16 @@ export const addUserSchema = z.object({
 });
 
 export const changePasswordSchema = z.object({
-  userId: z.number().int().positive(),
-  newPassword: z.string().min(8, 'Password must be at least 8 characters.'),
-  currentPassword: z.string().min(1).optional(),
+  userId: z.number({
+    required_error: 'User id is required',
+    invalid_type_error: 'User id is required',
+  }).int().positive(),
+  newPassword: z
+    .string({
+      required_error: 'New password is required',
+      invalid_type_error: 'New password is required',
+    })
+    .min(1, 'New password is required'),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
