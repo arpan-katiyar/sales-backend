@@ -22,6 +22,11 @@ const envSchema = z.object({
     .transform((value) => value === 'true'),
   SEED_ADMIN_USERNAME: z.string().optional().default(''),
   SEED_ADMIN_PASSWORD: z.string().optional().default(''),
+  S3_ENDPOINT: z.string().optional().default(''),
+  S3_BUCKET: z.string().optional().default(''),
+  S3_ACCESS_KEY: z.string().optional().default(''),
+  S3_SECRET_KEY: z.string().optional().default(''),
+  S3_REGION: z.string().optional().default('us-east-1'),
 });
 
 export type Env = z.infer<typeof envSchema>;

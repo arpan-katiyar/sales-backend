@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 
 import { getDb } from '../../db/client.js';
 import { userRoles, users } from '../../db/schema/index.js';
@@ -87,6 +87,49 @@ export const usersRepository = {
     });
   },
 
+  async listActive(): Promise<Array<{ id: number; username: string; status: string; roles: string[] }>> {
+    const rows = await getDb()
+      .select({
+        id: users.id,
+        username: users.username,
+        status: users.status,
+        role: userRoles.role,
+      })
+      .from(users)
+      .leftJoin(userRoles, eq(userRoles.userId, users.id))
+      .where(eq(users.status, 'ACTIVE'))
+      .orderBy(asc(users.id), asc(userRoles.role));
+    return groupUsers(rows);
+  },
+
+  async searchActive(keyword: string): Promise<Array<{ id: number; username: string; roles: string[] }>> {
+    const escaped = keyword.replace(/[\\%_]/g, (char) => `\\${char}`);
+    const rows = await getDb()
+      .select({
+        id: users.id,
+        username: users.username,
+        status: users.status,
+        role: userRoles.role,
+      })
+      .from(users)
+      .leftJoin(userRoles, eq(userRoles.userId, users.id))
+      .where(and(eq(users.status, 'ACTIVE'), sql`LOWER(${users.username}) LIKE LOWER(${`%${escaped}%`}) ESCAPE '\\\\'`))
+      .orderBy(asc(users.username), asc(userRoles.role));
+    return groupUsers(rows);
+  },
+
+  async deactivate(userId: number): Promise<boolean> {
+    const result = await getDb()
+      .update(users)
+      .set({
+        status: 'INACTIVE',
+        updatedAt: new Date(),
+      })
+      .where(and(eq(users.id, userId), eq(users.status, 'ACTIVE')));
+    const header = result[0] as { affectedRows?: number } | undefined;
+    return (header?.affectedRows ?? 0) > 0;
+  },
+
   async updatePassword(userId: number, passwordHash: string): Promise<void> {
     await getDb()
       .update(users)
@@ -98,5 +141,24 @@ export const usersRepository = {
       .where(eq(users.id, userId));
   },
 };
+
+function groupUsers(
+  rows: Array<{ id: number; username: string; status: string; role: string | null }>,
+): Array<{ id: number; username: string; status: string; roles: string[] }> {
+  const grouped = new Map<number, { id: number; username: string; status: string; roles: string[] }>();
+  for (const row of rows) {
+    const current = grouped.get(row.id) ?? {
+      id: row.id,
+      username: row.username,
+      status: row.status,
+      roles: [],
+    };
+    if (row.role) {
+      current.roles.push(row.role);
+    }
+    grouped.set(row.id, current);
+  }
+  return [...grouped.values()];
+}
 
 export { isDuplicateError };

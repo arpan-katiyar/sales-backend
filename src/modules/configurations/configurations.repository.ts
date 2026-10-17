@@ -10,6 +10,15 @@ export const configurationsRepository = {
     return getDb().select().from(configurations).orderBy(asc(configurations.id));
   },
 
+  async findByKey(key: string): Promise<ConfigurationRow | null> {
+    const [row] = await getDb()
+      .select()
+      .from(configurations)
+      .where(eq(configurations.configKey, key))
+      .limit(1);
+    return row ?? null;
+  },
+
   async findById(id: number): Promise<ConfigurationRow | null> {
     const [row] = await getDb()
       .select()
